@@ -18,23 +18,23 @@ package com.google.firebase.codelab.friendlychat
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.firebase.ui.auth.AuthUI
-import com.firebase.ui.auth.AuthUI.IdpConfig.*
 import com.firebase.ui.database.FirebaseRecyclerOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
-import com.google.firebase.codelab.friendlychat.BuildConfig
 import com.google.firebase.codelab.friendlychat.databinding.ActivityMainBinding
 import com.google.firebase.codelab.friendlychat.model.FriendlyMessage
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.StorageReference
+import com.google.firebase.storage.ktx.storage
 
 class MainActivity : AppCompatActivity() {
 
@@ -52,6 +52,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (BuildConfig.DEBUG) {
+            Firebase.database.useEmulator("10.0.2.2", 9000)
+            Firebase.auth.useEmulator("10.0.2.2", 9099)
+            Firebase.storage.useEmulator("10.0.2.2", 9199)
+        }
 
         // This codelab uses View Binding
         // See: https://developer.android.com/topic/libraries/view-binding
@@ -99,6 +105,17 @@ class MainActivity : AppCompatActivity() {
 
         // When the send button is clicked, send a text message
         // TODO: implement
+
+        binding.sendButton.setOnClickListener {
+            val friendlyMessage = FriendlyMessage(
+                binding.messageEditText.text.toString(),
+                getUserName(),
+                getPhotoUrl(),
+                null /* no image */
+            )
+            db.reference.child(MESSAGES_CHILD).push().setValue(friendlyMessage)
+            binding.messageEditText.setText("")
+        }
 
         // When the image button is clicked, launch the image picker
         binding.addMessageImageView.setOnClickListener {
@@ -162,6 +179,30 @@ class MainActivity : AppCompatActivity() {
     private fun putImageInStorage(storageReference: StorageReference, uri: Uri, key: String?) {
         // Upload the image to Cloud Storage
         // TODO: implement
+
+        storageReference.putFile(uri)
+            .addOnSuccessListener(
+                this
+            ) { taskSnapshot -> // After the image loads, get a public downloadUrl for the image
+                // and add it to the message.
+                taskSnapshot.metadata!!.reference!!.downloadUrl
+                    .addOnSuccessListener { uri ->
+                        val friendlyMessage =
+                            FriendlyMessage(null, getUserName(), getPhotoUrl(), uri.toString())
+                        db.reference
+                            .child(MESSAGES_CHILD)
+                            .child(key!!)
+                            .setValue(friendlyMessage)
+                    }
+            }
+            .addOnFailureListener(this) { e ->
+                Log.w(
+                    TAG,
+                    "Image upload task was unsuccessful.",
+                    e
+                )
+            }
+
     }
 
     private fun signOut() {
